@@ -18,9 +18,9 @@ const char* keys =
 int main(int argc, char* argv[])
 {
     //INDLÆSNING AF BILLEDER
-    std::string imagePath = "/home/matmat1000/Documents/lek8/box.png";
+    std::string imagePath = "/home/matmat1000/C++/Machine_Vision/Git/Computer-Vision/Lek8_Feature/box.png";
     Mat img1 = imread(imagePath, IMREAD_GRAYSCALE);
-    std::string imagePath2 = "/home/matmat1000/Documents/lek8/box_in_scene.png";
+    std::string imagePath2 = "/home/matmat1000/C++/Machine_Vision/Git/Computer-Vision/Lek8_Feature/box_in_scene.png";
     Mat img2 = imread(imagePath2, IMREAD_GRAYSCALE);
     if (img1.empty() || img2.empty())
     {
@@ -65,9 +65,9 @@ int main(int argc, char* argv[])
     //FLANN MATCH - Finder de gode matches
     Ptr<DescriptorMatcher> matcherFlann = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_HAMMING);
     std::vector<std::vector<DMatch>> knn_matches;
-    matcher->knnMatch(descriptors1, descriptors2, knn_matches, 2);
+    matcherFlann->knnMatch(descriptors1, descriptors2, knn_matches, 2);
 
-    //-- Filter matches using the Lowe's ratio test
+    // Filter matches using the Lowe's ratio test
     const float ratio_thresh = 0.7f;
     std::vector<DMatch> good_matches;
     for (size_t i = 0; i < knn_matches.size(); i++)
@@ -78,31 +78,27 @@ int main(int argc, char* argv[])
         }
     }
 
-    //-- Draw matches
+    // Draw matches
     Mat img_matchesFlann;
-    drawMatches(img1, keypoints1, img2, keypoints2, good_matches, img_matches, Scalar::all(-1),
+    drawMatches(img1, keypoints1, img2, keypoints2, good_matches, img_matchesFlann, Scalar::all(-1),
                 Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
-    //-- Show detected matches
-    imshow("Good Matches", img_matches);
-
+    imshow("Good Matches", img_matchesFlann);
     waitKey();
 
-
-    //FIND OBJEKT
-    //-- Step 1: Detect keypoints and compute descriptors using AKAZE
+    // FIND OBJEKT
     Ptr<AKAZE> detector2 = AKAZE::create();
     std::vector<KeyPoint> keypoints_object, keypoints_scene;
     Mat descriptors_object, descriptors_scene;
-    detector->detectAndCompute(img1, noArray(), keypoints_object, descriptors_object);
-    detector->detectAndCompute(img2, noArray(), keypoints_scene, descriptors_scene);
+    detector2->detectAndCompute(img1, noArray(), keypoints_object, descriptors_object);
+    detector2->detectAndCompute(img2, noArray(), keypoints_scene, descriptors_scene);
 
-    //-- Step 2: Matching descriptor vectors using brute-force matcher with Hamming norm
+    // Step 2: Matching descriptor vectors using brute-force matcher with Hamming norm
     Ptr<DescriptorMatcher> matcher2 = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_HAMMING);
     std::vector<std::vector<DMatch>> knn_matches2;
-    matcher->knnMatch(descriptors_object, descriptors_scene, knn_matches, 2);
+    matcher2->knnMatch(descriptors_object, descriptors_scene, knn_matches2, 2);
 
-    //-- Filter matches using the Lowe's ratio test
+    // Filter matches using the Lowe's ratio test
     const float ratio_thresh2 = 0.75f;
     std::vector<DMatch> good_matches2;
     for (size_t i = 0; i < knn_matches2.size(); i++)
@@ -113,52 +109,50 @@ int main(int argc, char* argv[])
         }
     }
 
-    //-- Draw matches
+    // Draw matches
     Mat img_matches2;
-    drawMatches(img1, keypoints_object, img2, keypoints_scene, good_matches, img_matches,
+    drawMatches(img1, keypoints_object, img2, keypoints_scene, good_matches2, img_matches2,
                 Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
-    //-- Localize the object
+    // Localize the object
     std::vector<Point2f> obj;
     std::vector<Point2f> scene;
 
-    for (size_t i = 0; i < good_matches.size(); i++)
+    for (size_t i = 0; i < good_matches2.size(); i++)
     {
-        //-- Get the keypoints from the good matches
-        obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
-        scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
+        obj.push_back(keypoints_object[good_matches2[i].queryIdx].pt);
+        scene.push_back(keypoints_scene[good_matches2[i].trainIdx].pt);
     }
 
-    //-- Compute homography if we have enough matches
-    if (good_matches.size() >= 4)
+    // Compute homography if we have enough matches
+    if (good_matches2.size() >= 4)
     {
         Mat H = findHomography(obj, scene, RANSAC);
 
-        //-- Get the corners from the image_1 (the object to be "detected")
+        // Get the corners from the image_1 (the object to be "detected")
         std::vector<Point2f> obj_corners(4);
         obj_corners[0] = Point2f(0, 0);
         obj_corners[1] = Point2f((float)img1.cols, 0);
-        obj_corners[2] = Point2f((float)img2.cols, (float)img1.rows);
+        obj_corners[2] = Point2f((float)img1.cols, (float)img1.rows);
         obj_corners[3] = Point2f(0, (float)img1.rows);
         std::vector<Point2f> scene_corners(4);
 
         perspectiveTransform(obj_corners, scene_corners, H);
 
-        //-- Draw lines between the corners (the mapped object in the scene - image_2)
-        line(img_matches, scene_corners[0] + Point2f((float)img1.cols, 0),
-             scene_corners[1] + Point2f((float)img2.cols, 0), Scalar(0, 255, 0), 4);
-        line(img_matches, scene_corners[1] + Point2f((float)img1.cols, 0),
-             scene_corners[2] + Point2f((float)img2.cols, 0), Scalar(0, 255, 0), 4);
-        line(img_matches, scene_corners[2] + Point2f((float)img1.cols, 0),
-             scene_corners[3] + Point2f((float)img2.cols, 0), Scalar(0, 255, 0), 4);
-        line(img_matches, scene_corners[3] + Point2f((float)img1.cols, 0),
-             scene_corners[0] + Point2f((float)img2.cols, 0), Scalar(0, 255, 0), 4);
+        // Draw lines between the corners (the mapped object in the scene - image_2)
+        line(img_matches2, scene_corners[0] + Point2f((float)img1.cols, 0),
+             scene_corners[1] + Point2f((float)img1.cols, 0), Scalar(0, 255, 0), 4);
+        line(img_matches2, scene_corners[1] + Point2f((float)img1.cols, 0),
+             scene_corners[2] + Point2f((float)img1.cols, 0), Scalar(0, 255, 0), 4);
+        line(img_matches2, scene_corners[2] + Point2f((float)img1.cols, 0),
+             scene_corners[3] + Point2f((float)img1.cols, 0), Scalar(0, 255, 0), 4);
+        line(img_matches2, scene_corners[3] + Point2f((float)img1.cols, 0),
+             scene_corners[0] + Point2f((float)img1.cols, 0), Scalar(0, 255, 0), 4);
     }
 
-    //-- Show detected matches
-    imshow("Good Matches & Object detection", img_matches);
-
+    imshow("Good Matches & Object detection", img_matches2);
     waitKey();
+
 
     return 0;
 }
